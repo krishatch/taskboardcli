@@ -37,39 +37,46 @@ struct TaskList {
     tasks: Vec<Task>,
 }
 
+#[derive(Copy, Clone, Debug)]
+enum MenuItem {
+    Home,
+    NewList,
+    NewTask,
+}
+
+impl From<MenuItem> for usize {
+    fn from(input: MenuItem) -> usize {
+        match input {
+            MenuItem::Home => 0,
+            MenuItem::NewList => 1,
+            MenuItem::NewTask => 2,
+        }
+    }
+}
+
 fn main() -> io::Result<()> {
     enable_raw_mode()?;
     stdout().execute(EnterAlternateScreen)?;
     let mut terminal = Terminal::new(CrosstermBackend::new(stdout()))?;
 
-    let mut should_quit = false;
-    while !should_quit {
-        terminal.draw(ui)?;
-        should_quit = handle_events()?;
+    let mut active_menu_item = MenuItem::Home;
+    let mut quit = false;
+
+    let mut active_list: u32= 0;
+    let mut active_list_state = ListState::default();
+    active_list_state.select(Some(0));
+    while !quit {
+        match active_menu_item{
+            MenuItem::Home => {let _ = terminal.draw(ui);}
+            MenuItem::NewList => {let _ = terminal.draw(list_creation);}
+            MenuItem::NewTask => {let _ = terminal.draw(task_creation);}
+        }
+        quit = handle_events(&mut active_menu_item, &mut active_list)?;
     }
 
     disable_raw_mode()?;
     stdout().execute(LeaveAlternateScreen)?;
     Ok(())
-}
-
-fn handle_events() -> io::Result<bool> {
-    if event::poll(std::time::Duration::from_millis(50))? {
-        if let Event::Key(key) = event::read()? {
-            if key.kind == event::KeyEventKind::Press && key.code == KeyCode::Char('q') {
-                return Ok(true);
-            }
-            if key.kind == event::KeyEventKind::Press && key.code == KeyCode::Char('n') {
-                let _ = create_list();
-                return Ok(false);
-            }
-            if key.kind == event::KeyEventKind::Press && key.code == KeyCode::Char('d') {
-                let _ = delete_list();
-                return Ok(false);
-            }
-        }
-    }
-    Ok(false)
 }
 
 fn ui(frame: &mut Frame) {
@@ -85,7 +92,6 @@ fn ui(frame: &mut Frame) {
         ].as_ref(),
         )
         .split(size);
-
 
     /*** Help menu ***/
     let help_info = get_helpline();
@@ -143,29 +149,6 @@ fn ui(frame: &mut Frame) {
 
                 frame.render_widget(render_list, taskboard[i]);
             }
-            // let left = Paragraph::new("List 1")
-            //     .style(Style::default().fg(Color::Rgb(0xFF, 0xFF, 0xFF)))
-            //     .alignment(Alignment::Center)
-            //     .block(
-            //         Block::default()
-            //             .borders(Borders::ALL)
-            //             .style(Style::default().fg(Color::Rgb(0xcc, 0x55, 0x00)))
-            //             .title("Taskboard")
-            //             .border_type(BorderType::Plain),
-            //     );
-            //
-            // let right = Paragraph::new("List 2")
-            //     .style(Style::default().fg(Color::Rgb(0xFF, 0xFF, 0xFF)))
-            //     .alignment(Alignment::Center)
-            //     .block(
-            //         Block::default()
-            //             .borders(Borders::ALL)
-            //             .style(Style::default().fg(Color::Rgb(0xcc, 0x55, 0x00)))
-            //             .title("Taskboard")
-            //             .border_type(BorderType::Plain),
-            //     );
-            // frame.render_widget(left, taskboard[0]);
-            // frame.render_widget(right, taskboard[1]);
         }
     }
 
@@ -184,6 +167,15 @@ fn ui(frame: &mut Frame) {
     frame.render_widget(copyright, chunks[2]);
 }
 
+/*** List creation ***/
+fn list_creation(frame: &mut Frame){
+    
+}
+
+/*** Task creation ***/
+fn task_creation(frame: &mut Frame){
+    
+}
 // fn render_taskboard<'a>(tasklist_list_state: &ListState) -> Paragraph<'a>{
 //
 // }
@@ -311,3 +303,78 @@ fn get_helpline() -> Line<'static>{
         ]
     )
 }
+
+fn handle_events(active_menu_item: &mut MenuItem, active_list: &mut u32) -> io::Result<bool> {
+    if event::poll(std::time::Duration::from_millis(50))? {
+        if let Event::Key(key) = event::read()? {
+            match active_menu_item {
+                MenuItem::Home => {
+                    if key.kind == event::KeyEventKind::Press && key.code == KeyCode::Char('q') {
+                        return Ok(true);
+                    }
+                    if key.kind == event::KeyEventKind::Press && key.code == KeyCode::Char('n') {
+                        *active_menu_item = MenuItem::NewList;
+                        return Ok(false);
+                    }
+                    if key.kind == event::KeyEventKind::Press && key.code == KeyCode::Char('a') {
+                        *active_menu_item = MenuItem::NewTask;
+                        return Ok(false);
+                    }
+                    if key.kind == event::KeyEventKind::Press && key.code == KeyCode::Char('d') {
+                        let _ = delete_list();
+                        return Ok(false);
+                    }
+                    if key.kind == event::KeyEventKind::Press && key.code == KeyCode::Char('0') {
+                        *active_list = 0;
+                        return Ok(false);
+                    }
+                    if key.kind == event::KeyEventKind::Press && key.code == KeyCode::Char('1') {
+                        *active_list = 1;
+                        return Ok(false);
+                    }
+                    if key.kind == event::KeyEventKind::Press && key.code == KeyCode::Char('2') {
+                        *active_list = 2;
+                        return Ok(false);
+                    }
+                    if key.kind == event::KeyEventKind::Press && key.code == KeyCode::Char('3') {
+                        *active_list = 3;
+                        return Ok(false);
+                    }
+                    if key.kind == event::KeyEventKind::Press && key.code == KeyCode::Char('4') {
+                        *active_list = 4;
+                        return Ok(false);
+                    }
+                    if key.kind == event::KeyEventKind::Press && key.code == KeyCode::Char('5') {
+                        *active_list = 5;
+                        return Ok(false);
+                    }
+                    if key.kind == event::KeyEventKind::Press && key.code == KeyCode::Char('6') {
+                        *active_list = 6;
+                        return Ok(false);
+                    }
+                    if key.kind == event::KeyEventKind::Press && key.code == KeyCode::Char('7') {
+                        *active_list = 7;
+                        return Ok(false);
+                    }
+                    if key.kind == event::KeyEventKind::Press && key.code == KeyCode::Char('8') {
+                        *active_list = 8;
+                        return Ok(false);
+                    }
+                    if key.kind == event::KeyEventKind::Press && key.code == KeyCode::Char('9') {
+                        *active_list = 9;
+                        return Ok(false);
+                    }
+                }
+                _ => {
+                    if key.kind == event::KeyEventKind::Press && key.code == KeyCode::Char('\n') {
+                        *active_menu_item = MenuItem::NewList;
+                        return Ok(false);
+                    }
+                }
+
+            }
+        }
+    }
+    Ok(false)
+}
+
