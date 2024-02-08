@@ -1,4 +1,4 @@
-use std::io::{self, stdout};
+use std::io::{self, stdout, Stdout};
 use crossterm::{ event::{self, Event, KeyCode},
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
     ExecutableCommand,
@@ -25,31 +25,28 @@ pub enum Error {
     ParseDBError(#[from] serde_json::Error),
 }
 
-#[derive(Serialize, Deserialize, Clone)]
-struct Task {
-    title: String,
-    due: String,
-}
+// #[derive(Serialize, Deserialize, Clone)]
+// struct Task {
+//     title: String,
+//     due: String,
+// }
 #[derive(Serialize, Deserialize, Clone)]
 struct TaskList {
     size: usize,
+    num: usize,
     name: String,
-    tasks: Vec<Task>,
+    tasks: Vec<String>,
 }
 
 #[derive(Copy, Clone, Debug)]
 enum MenuItem {
     Home,
-    NewList,
-    NewTask,
 }
 
 impl From<MenuItem> for usize {
     fn from(input: MenuItem) -> usize {
         match input {
-            MenuItem::Home => 0,
-            MenuItem::NewList => 1,
-            MenuItem::NewTask => 2,
+            MenuItem::Home => 0
         }
     }
 }
@@ -62,14 +59,12 @@ fn main() -> io::Result<()> {
     let mut active_menu_item = MenuItem::Home;
     let mut quit = false;
 
-    let mut active_list: u32= 0;
+    let mut active_list: usize = 1;
     let mut active_list_state = ListState::default();
     active_list_state.select(Some(0));
     while !quit {
         match active_menu_item{
-            MenuItem::Home => {let _ = terminal.draw(ui);}
-            MenuItem::NewList => {let _ = terminal.draw(list_creation);}
-            MenuItem::NewTask => {let _ = terminal.draw(task_creation);}
+            MenuItem::Home => {let _ = ui(&mut terminal, active_list);}
         }
         quit = handle_events(&mut active_menu_item, &mut active_list)?;
     }
@@ -79,105 +74,129 @@ fn main() -> io::Result<()> {
     Ok(())
 }
 
-fn ui(frame: &mut Frame) {
+fn ui(terminal: &mut Terminal<CrosstermBackend<Stdout>>, active_list: usize) -> Result<u32, Error> {
     /*** Set up default layout ***/
-    let size = frame.size();
-    let chunks = Layout::default()
-        .direction(Direction::Vertical)
-        .margin(2)
-        .constraints([
-            Constraint::Length(3),
-            Constraint::Min(2),
-            Constraint::Length(3),
-        ].as_ref(),
-        )
-        .split(size);
+    terminal.draw(|frame| {
+        let size = frame.size();
+        let chunks = Layout::default()
+            .direction(Direction::Vertical)
+            .margin(2)
+            .constraints([
+                Constraint::Length(3),
+                Constraint::Min(2),
+                Constraint::Length(3),
+            ].as_ref(),
+            )
+            .split(size);
 
-    /*** Help menu ***/
-    let help_info = get_helpline();
-    let help = Paragraph::new(help_info.clone())
-        .style(Style::default().fg(Color::Gray))
-        .alignment(Alignment::Center)
-        .block(
-            Block::default()
-                .borders(Borders::ALL)
-                .style(Style::default().fg(Color::Rgb(0xcc, 0x55, 0x00)))
-                .title("Commands")
-                .border_type(BorderType::Plain),
-            );
-    frame.render_widget(help, chunks[0]);
-
-    /*** Main Taskboard ***/
-
-    let tasklists = read_db().expect("can fetch tasklist list");
-    let listlen = tasklists.len();
-    match listlen{
-        0 => {
-            let taskboard = Paragraph::new("No Lists")
-                .style(Style::default().fg(Color::Rgb(0xFF, 0xFF, 0xFF)))
-                .alignment(Alignment::Center)
-                .block(
-                    Block::default()
-                        .borders(Borders::ALL)
-                        .style(Style::default().fg(Color::Rgb(0xcc, 0x55, 0x00)))
-                        .title("Taskboard")
-                        .border_type(BorderType::Plain),
+        /*** Help menu ***/
+        let help_info = get_helpline();
+        let help = Paragraph::new(help_info.clone())
+            .style(Style::default().fg(Color::Gray))
+            .alignment(Alignment::Center)
+            .block(
+                Block::default()
+                    .borders(Borders::ALL)
+                    .style(Style::default().fg(Color::Rgb(0xcc, 0x55, 0x00)))
+                    .title("Commands")
+                    .border_type(BorderType::Plain),
                 );
-            frame.render_widget(taskboard, chunks[1]);
-        }
-        _=>{
-            let mut lists = vec![];
-            for _i in 0..listlen{
-                lists.push(Constraint::Min(0));
-            }
-            let taskboard = Layout::default()
-                .direction(Direction::Horizontal)
-                .constraints(lists)
-                .split(chunks[1]);
+        frame.render_widget(help, chunks[0]);
 
-            for (i, list) in tasklists.into_iter().enumerate(){
-                let render_list = Paragraph::new("")
+        /*** Main Taskboard ***/
+
+        let mut task_list_state = ListState::default();
+        let tasklists = read_db().expect("can fetch tasklist list");
+        let listlen = tasklists.len();
+        match listlen{
+            0 => {
+                let taskboard = Paragraph::new("No Lists")
                     .style(Style::default().fg(Color::Rgb(0xFF, 0xFF, 0xFF)))
                     .alignment(Alignment::Center)
                     .block(
                         Block::default()
                             .borders(Borders::ALL)
                             .style(Style::default().fg(Color::Rgb(0xcc, 0x55, 0x00)))
-                            .title(list.name.clone())
+                            .title("Taskboard")
                             .border_type(BorderType::Plain),
                     );
+                frame.render_widget(taskboard, chunks[1]);
+            }
+            _=>{
+                let mut lists = vec![];
+                for _i in 0..listlen{
+                    lists.push(Constraint::Min(0));
+                }
+                let taskboard = Layout::default()
+                    .direction(Direction::Horizontal)
+                    .constraints(lists)
+                    .split(chunks[1]);
 
-                frame.render_widget(render_list, taskboard[i]);
+                for (i, list) in tasklists.into_iter().enumerate(){
+                    let taskboard_list = Layout::default()
+                        .direction(Direction::Vertical)
+                        .constraints([
+                            Constraint::Length(3),
+                            Constraint::Min(2),
+                        ])
+                        .split(taskboard[i]);
+                    let title = Paragraph::new(list.name.clone())
+                        .style(Style::default().fg(Color::Rgb(0xFF, 0xFF, 0xFF)))
+                        .alignment(Alignment::Center)
+                        .block(
+                            Block::default()
+                                .borders(Borders::ALL)
+                                .style(Style::default().fg(Color::Rgb(0xcc, 0x55, 0x00)))
+                                .title(list.name.clone())
+                                .border_type(BorderType::Plain),
+                        );
+                    let mut color = Color::Rgb(0xcc, 0x55, 0x00);
+                    if list.num == active_list {
+                        color = Color::Yellow;
+                    }
+                    let list_out = List::new(list.tasks)
+                            .block(Block::default().fg(color).title("List").borders(Borders::ALL))
+                            .style(Style::default().fg(Color::Rgb(0xff, 0xff, 0xff)))
+                            .highlight_style(Style::default().add_modifier(Modifier::ITALIC))
+                            .highlight_symbol(">>")
+                            .repeat_highlight_symbol(true)
+                            .direction(ListDirection::TopToBottom);
+                    frame.render_stateful_widget(list_out, taskboard_list[1], &mut task_list_state);
+                    frame.render_widget(title, taskboard_list[0]);
+                }
             }
         }
-    }
 
-    let copyright = Paragraph::new("taskboardcli 2024 - all rights reserved")
-        .style(Style::default().fg(Color::Rgb(0xFF, 0xFF, 0xFF)))
-        .alignment(Alignment::Center)
-        .block(
-            Block::default()
-                .borders(Borders::ALL)
-                .style(Style::default().fg(Color::Rgb(0xcc, 0x55, 0x00)))
-                .title("Copyright")
-                .border_type(BorderType::Plain),
-        );
+        let copyright = Paragraph::new("taskboardcli 2024 - all rights reserved")
+            .style(Style::default().fg(Color::Rgb(0xFF, 0xFF, 0xFF)))
+            .alignment(Alignment::Center)
+            .block(
+                Block::default()
+                    .borders(Borders::ALL)
+                    .style(Style::default().fg(Color::Rgb(0xcc, 0x55, 0x00)))
+                    .title("Copyright")
+                    .border_type(BorderType::Plain),
+            );
 
-    /*** Render widgets ***/
-    frame.render_widget(copyright, chunks[2]);
+        /*** Render widgets ***/
+        frame.render_widget(copyright, chunks[2]);
+    })?;
+    // let mut frame = terminal.get_frame();
+    Ok(0)
 }
 
-/*** List creation ***/
-fn list_creation(frame: &mut Frame){
-    
-}
-
-/*** Task creation ***/
-fn task_creation(frame: &mut Frame){
-    
-}
-// fn render_taskboard<'a>(tasklist_list_state: &ListState) -> Paragraph<'a>{
-//
+// fn render_list(list: &TaskList) -> (Paragraph, List)    {
+//     let title = Paragraph::new(list.name.clone())
+//         .style(Style::default().fg(Color::Rgb(0xFF, 0xFF, 0xFF)))
+//         .alignment(Alignment::Center)
+//         .block(
+//             Block::default()
+//                 .borders(Borders::ALL)
+//                 .style(Style::default().fg(Color::Rgb(0xcc, 0x55, 0x00)))
+//                 .title(list.name.clone())
+//                 .border_type(BorderType::Plain),
+//         );
+//     (title, list_out)
 // }
 
 fn read_db() -> Result<Vec<TaskList>, Error> {
@@ -198,16 +217,11 @@ fn create_list() -> Result<Vec<TaskList>, Error>{
 
     let new_list = TaskList {
         size: 2,
-        name: format!("list {}", parsed.len()),
+        num: parsed.len() + 1,
+        name: format!("list {}", parsed.len() + 1),
         tasks: vec![
-            Task{
-                title: "task 1".to_string(),
-                due: "now".to_string(),
-            },
-            Task {
-                title: "task 2".to_string(),
-                due: "later".to_string(),
-            },
+            "task 1".to_string(),
+            "task 2".to_string(),
         ]
     };
 
@@ -304,24 +318,39 @@ fn get_helpline() -> Line<'static>{
     )
 }
 
-fn handle_events(active_menu_item: &mut MenuItem, active_list: &mut u32) -> io::Result<bool> {
+fn handle_events(active_menu_item: &mut MenuItem, active_list: &mut usize) -> io::Result<bool> {
     if event::poll(std::time::Duration::from_millis(50))? {
         if let Event::Key(key) = event::read()? {
             match active_menu_item {
                 MenuItem::Home => {
+                    if key.kind == event::KeyEventKind::Press && key.code == KeyCode::Enter {
+                        *active_menu_item = MenuItem::Home;
+                        return Ok(false);
+                    }
                     if key.kind == event::KeyEventKind::Press && key.code == KeyCode::Char('q') {
                         return Ok(true);
                     }
                     if key.kind == event::KeyEventKind::Press && key.code == KeyCode::Char('n') {
-                        *active_menu_item = MenuItem::NewList;
+                        let _ = create_list();
                         return Ok(false);
                     }
                     if key.kind == event::KeyEventKind::Press && key.code == KeyCode::Char('a') {
-                        *active_menu_item = MenuItem::NewTask;
                         return Ok(false);
                     }
                     if key.kind == event::KeyEventKind::Press && key.code == KeyCode::Char('d') {
                         let _ = delete_list();
+                        return Ok(false);
+                    }
+                    if key.kind == event::KeyEventKind::Press && key.code == KeyCode::Char('h') {
+                        if *active_list > 1 {
+                            *active_list -= 1;
+                        }
+                        return Ok(false);
+                    }
+                    if key.kind == event::KeyEventKind::Press && key.code == KeyCode::Char('l') {
+                        if *active_list < 9 {
+                            *active_list += 1;
+                        }
                         return Ok(false);
                     }
                     if key.kind == event::KeyEventKind::Press && key.code == KeyCode::Char('0') {
@@ -366,8 +395,8 @@ fn handle_events(active_menu_item: &mut MenuItem, active_list: &mut u32) -> io::
                     }
                 }
                 _ => {
-                    if key.kind == event::KeyEventKind::Press && key.code == KeyCode::Char('\n') {
-                        *active_menu_item = MenuItem::NewList;
+                    if key.kind == event::KeyEventKind::Press && key.code == KeyCode::Enter {
+                        *active_menu_item = MenuItem::Home;
                         return Ok(false);
                     }
                 }
