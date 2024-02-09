@@ -33,6 +33,7 @@ pub enum Error {
 struct TaskBoard {
     num_lists: usize,
     lists: Vec<TaskList>,
+    active_list: usize,
 }
 
 /*
@@ -76,32 +77,29 @@ fn main() -> io::Result<()> {
     /*** initialize taskboard and home ***/
     let mut active_menu_item = MenuItem::Home;
     let mut quit = false;
-    let mut active_list: usize = 1;
     let mut active_list_state = ListState::default();
     active_list_state.select(Some(0));
-    let db_content = fs::read_to_string(DB_PATH)?;
-    let mut _lists: Vec<TaskList> = match serde_json::from_str(&db_content){
-        Ok(parsed) => parsed,
-        Err(_err) => vec![],
-    };
+    let mut taskboard = TaskBoard{
+        num_lists: read_db().expect("valid read").len(), 
+        lists:read_db().expect("valid read"),
+        active_list: 1,
+    }; // Make a function that initialized the creation of the taskboard
     
-    let mut taskboard = TaskBoard{num_lists: 0, lists:_lists }; // Make a function that initialized the creation of the taskboard
-    
-
     /*** main loop ***/
     while !quit {
         match active_menu_item{
-            MenuItem::Home => {let _ = ui(&mut terminal, active_list,&mut taskboard);}
+            MenuItem::Home => {let _ = ui(&mut terminal, &mut taskboard);}
         }
-        quit = handle_events(&mut active_menu_item, &mut active_list)?;
+        quit = handle_events(&mut active_menu_item, &mut taskboard)?;
     }
 
+    let _ = write_db(&mut taskboard);
     disable_raw_mode()?;
     stdout().execute(LeaveAlternateScreen)?;
     Ok(())
 }
 
-fn ui(terminal: &mut Terminal<CrosstermBackend<Stdout>>, active_list: usize, taskboard: &mut TaskBoard) -> Result<u32, Error> {
+fn ui(terminal: &mut Terminal<CrosstermBackend<Stdout>>, taskboard: &mut TaskBoard) -> Result<u32, Error> {
     /*** Set up default layout ***/
     terminal.draw(|frame| {
         let size = frame.size();
@@ -133,9 +131,7 @@ fn ui(terminal: &mut Terminal<CrosstermBackend<Stdout>>, active_list: usize, tas
         /*** Main Taskboard ***/
 
         let mut task_list_state = ListState::default();
-        let tasklists = read_db().expect("can fetch tasklist list");
-        let listlen = tasklists.len();
-        match listlen{
+        match taskboard.num_lists{
             0 => {
                 let taskboard = Paragraph::new("No Lists")
                     .style(Style::default().fg(Color::Rgb(0xFF, 0xFF, 0xFF)))
@@ -150,23 +146,23 @@ fn ui(terminal: &mut Terminal<CrosstermBackend<Stdout>>, active_list: usize, tas
                 frame.render_widget(taskboard, chunks[1]);
             }
             _=>{
-                let mut lists = vec![];
-                for _i in 0..listlen{
-                    lists.push(Constraint::Min(0));
+                let mut constraints = vec![];
+                for _i in 0..taskboard.num_lists{
+                    constraints.push(Constraint::Min(0));
                 }
-                let taskboard = Layout::default()
+                let home = Layout::default()
                     .direction(Direction::Horizontal)
-                    .constraints(lists)
+                    .constraints(constraints)
                     .split(chunks[1]);
 
-                for (i, list) in tasklists.into_iter().enumerate(){
+                for (i, list) in taskboard.lists.clone().into_iter().enumerate(){
                     let taskboard_list = Layout::default()
                         .direction(Direction::Vertical)
                         .constraints([
                             Constraint::Length(3),
                             Constraint::Min(2),
                         ])
-                        .split(taskboard[i]);
+                        .split(home[i]);
                     let title = Paragraph::new(list.title.clone())
                         .style(Style::default().fg(Color::Rgb(0xFF, 0xFF, 0xFF)))
                         .alignment(Alignment::Center)
@@ -178,7 +174,7 @@ fn ui(terminal: &mut Terminal<CrosstermBackend<Stdout>>, active_list: usize, tas
                                 .border_type(BorderType::Plain),
                         );
                     let mut color = Color::Rgb(0xcc, 0x55, 0x00);
-                    if list.id == active_list {
+                    if list.id == taskboard.active_list{
                         color = Color::Yellow;
                     }
                     let list_out = List::new(list.tasks)
@@ -208,23 +204,8 @@ fn ui(terminal: &mut Terminal<CrosstermBackend<Stdout>>, active_list: usize, tas
         /*** Render widgets ***/
         frame.render_widget(copyright, chunks[2]);
     })?;
-    // let mut frame = terminal.get_frame();
     Ok(0)
 }
-
-// fn render_list(list: &TaskList) -> (Paragraph, List)    {
-//     let title = Paragraph::new(list.name.clone())
-//         .style(Style::default().fg(Color::Rgb(0xFF, 0xFF, 0xFF)))
-//         .alignment(Alignment::Center)
-//         .block(
-//             Block::default()
-//                 .borders(Borders::ALL)
-//                 .style(Style::default().fg(Color::Rgb(0xcc, 0x55, 0x00)))
-//                 .title(list.name.clone())
-//                 .border_type(BorderType::Plain),
-//         );
-//     (title, list_out)
-// }
 
 fn read_db() -> Result<Vec<TaskList>, Error> {
     let db_content = fs::read_to_string(DB_PATH)?;
@@ -256,6 +237,12 @@ fn create_list() -> Result<Vec<TaskList>, Error>{
     Ok(parsed)
 }
 
+fn write_db(taskboard: &mut TaskBoard) -> Result<Vec<TaskList>, Error>{
+    let tasklists = taskboard.lists.clone();
+    fs::write(DB_PATH, serde_json::to_vec(&tasklists)?)?;
+    Ok(tasklists)
+}
+
 fn delete_list() -> Result<Vec<TaskList>, Error> {
     let db_content = fs::read_to_string(DB_PATH)?;
     let mut parsed: Vec<TaskList> = match serde_json::from_str(&db_content){
@@ -271,6 +258,9 @@ fn delete_list() -> Result<Vec<TaskList>, Error> {
     Ok(parsed)
 
 }
+
+// fn add_task(taskboard: &mut TaskBoard) {
+// }
 
 fn get_helpline() -> Line<'static>{
     Line::from(vec![
@@ -344,7 +334,7 @@ fn get_helpline() -> Line<'static>{
     )
 }
 
-fn handle_events(active_menu_item: &mut MenuItem, active_list: &mut usize) -> io::Result<bool> {
+fn handle_events(active_menu_item: &mut MenuItem, taskboard: &mut TaskBoard) -> io::Result<bool> {
     if event::poll(std::time::Duration::from_millis(50))? {
         if let Event::Key(key) = event::read()? {
             match active_menu_item {
@@ -357,66 +347,73 @@ fn handle_events(active_menu_item: &mut MenuItem, active_list: &mut usize) -> io
                         return Ok(true);
                     }
                     if key.kind == event::KeyEventKind::Press && key.code == KeyCode::Char('n') {
-                        let _ = create_list();
+                        taskboard.lists = create_list().expect("valid list add");
+                        taskboard.num_lists = taskboard.lists.len();
                         return Ok(false);
                     }
                     if key.kind == event::KeyEventKind::Press && key.code == KeyCode::Char('a') {
+                        taskboard.lists[taskboard.active_list - 1].tasks.push("new task".to_string());
+                        return Ok(false);
+                    }
+                    if key.kind == event::KeyEventKind::Press && key.code == KeyCode::Char('c') {
+                        taskboard.lists[taskboard.active_list - 1].tasks.pop();
                         return Ok(false);
                     }
                     if key.kind == event::KeyEventKind::Press && key.code == KeyCode::Char('d') {
-                        let _ = delete_list();
+                        taskboard.lists = delete_list().expect("valid remove");
+                        taskboard.num_lists = taskboard.lists.len();
                         return Ok(false);
                     }
-                    if key.kind == event::KeyEventKind::Press && key.code == KeyCode::Char('h') {
-                        if *active_list > 1 {
-                            *active_list -= 1;
+                    if key.kind == event::KeyEventKind::Press && (key.code == KeyCode::Char('h') || key.code == KeyCode::Left) {
+                        if taskboard.active_list > 1 {
+                            taskboard.active_list -= 1;
                         }
                         return Ok(false);
                     }
-                    if key.kind == event::KeyEventKind::Press && key.code == KeyCode::Char('l') {
-                        if *active_list < 9 {
-                            *active_list += 1;
+                    if key.kind == event::KeyEventKind::Press && (key.code == KeyCode::Char('l')  || key.code == KeyCode::Right) {
+                        if taskboard.active_list < taskboard.num_lists {
+                            taskboard.active_list += 1;
                         }
                         return Ok(false);
                     }
                     if key.kind == event::KeyEventKind::Press && key.code == KeyCode::Char('0') {
-                        *active_list = 0;
+                        taskboard.active_list = 0;
                         return Ok(false);
                     }
                     if key.kind == event::KeyEventKind::Press && key.code == KeyCode::Char('1') {
-                        *active_list = 1;
+                        taskboard.active_list = 1;
                         return Ok(false);
                     }
                     if key.kind == event::KeyEventKind::Press && key.code == KeyCode::Char('2') {
-                        *active_list = 2;
+                        taskboard.active_list = 2;
                         return Ok(false);
                     }
                     if key.kind == event::KeyEventKind::Press && key.code == KeyCode::Char('3') {
-                        *active_list = 3;
+                        taskboard.active_list = 3;
                         return Ok(false);
                     }
                     if key.kind == event::KeyEventKind::Press && key.code == KeyCode::Char('4') {
-                        *active_list = 4;
+                        taskboard.active_list = 4;
                         return Ok(false);
                     }
                     if key.kind == event::KeyEventKind::Press && key.code == KeyCode::Char('5') {
-                        *active_list = 5;
+                        taskboard.active_list = 5;
                         return Ok(false);
                     }
                     if key.kind == event::KeyEventKind::Press && key.code == KeyCode::Char('6') {
-                        *active_list = 6;
+                        taskboard.active_list = 6;
                         return Ok(false);
                     }
                     if key.kind == event::KeyEventKind::Press && key.code == KeyCode::Char('7') {
-                        *active_list = 7;
+                        taskboard.active_list = 7;
                         return Ok(false);
                     }
                     if key.kind == event::KeyEventKind::Press && key.code == KeyCode::Char('8') {
-                        *active_list = 8;
+                        taskboard.active_list = 8;
                         return Ok(false);
                     }
                     if key.kind == event::KeyEventKind::Press && key.code == KeyCode::Char('9') {
-                        *active_list = 9;
+                        taskboard.active_list = 9;
                         return Ok(false);
                     }
                 }
