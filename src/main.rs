@@ -25,17 +25,33 @@ pub enum Error {
     ParseDBError(#[from] serde_json::Error),
 }
 
-// #[derive(Serialize, Deserialize, Clone)]
-// struct Task {
-//     title: String,
-//     due: String,
-// }
+/* The Taskboard struct represents all of the information needed to render the application
+* num_lists: usize - the current number of lists
+* lists: Vec<TaskList> - A vector of all List structds.
+*/
+#[derive(Serialize, Deserialize, Clone)]
+struct TaskBoard {
+    num_lists: usize,
+    lists: Vec<TaskList>,
+}
+
+/*
+* The TaskList is a list of all current tasks
+* id: usize - A numeric id for the list
+* title: String - Name of the list, e.g., ECE 339
+* tasks: Vec<Task> - A vector of all Task structs contained in this TaskList
+*/
 #[derive(Serialize, Deserialize, Clone)]
 struct TaskList {
-    size: usize,
-    num: usize,
-    name: String,
+    id: usize,
+    title: String,
     tasks: Vec<String>,
+}
+
+#[derive(Serialize, Deserialize, Clone)]
+struct Task {
+    title: String,
+    due: String,
 }
 
 #[derive(Copy, Clone, Debug)]
@@ -52,19 +68,30 @@ impl From<MenuItem> for usize {
 }
 
 fn main() -> io::Result<()> {
+    /*** set up terminal ***/
     enable_raw_mode()?;
     stdout().execute(EnterAlternateScreen)?;
     let mut terminal = Terminal::new(CrosstermBackend::new(stdout()))?;
 
+    /*** initialize taskboard and home ***/
     let mut active_menu_item = MenuItem::Home;
     let mut quit = false;
-
     let mut active_list: usize = 1;
     let mut active_list_state = ListState::default();
     active_list_state.select(Some(0));
+    let db_content = fs::read_to_string(DB_PATH)?;
+    let mut _lists: Vec<TaskList> = match serde_json::from_str(&db_content){
+        Ok(parsed) => parsed,
+        Err(_err) => vec![],
+    };
+    
+    let mut taskboard = TaskBoard{num_lists: 0, lists:_lists }; // Make a function that initialized the creation of the taskboard
+    
+
+    /*** main loop ***/
     while !quit {
         match active_menu_item{
-            MenuItem::Home => {let _ = ui(&mut terminal, active_list);}
+            MenuItem::Home => {let _ = ui(&mut terminal, active_list,&mut taskboard);}
         }
         quit = handle_events(&mut active_menu_item, &mut active_list)?;
     }
@@ -74,7 +101,7 @@ fn main() -> io::Result<()> {
     Ok(())
 }
 
-fn ui(terminal: &mut Terminal<CrosstermBackend<Stdout>>, active_list: usize) -> Result<u32, Error> {
+fn ui(terminal: &mut Terminal<CrosstermBackend<Stdout>>, active_list: usize, taskboard: &mut TaskBoard) -> Result<u32, Error> {
     /*** Set up default layout ***/
     terminal.draw(|frame| {
         let size = frame.size();
@@ -140,18 +167,18 @@ fn ui(terminal: &mut Terminal<CrosstermBackend<Stdout>>, active_list: usize) -> 
                             Constraint::Min(2),
                         ])
                         .split(taskboard[i]);
-                    let title = Paragraph::new(list.name.clone())
+                    let title = Paragraph::new(list.title.clone())
                         .style(Style::default().fg(Color::Rgb(0xFF, 0xFF, 0xFF)))
                         .alignment(Alignment::Center)
                         .block(
                             Block::default()
                                 .borders(Borders::ALL)
                                 .style(Style::default().fg(Color::Rgb(0xcc, 0x55, 0x00)))
-                                .title(list.name.clone())
+                                .title(list.title.clone())
                                 .border_type(BorderType::Plain),
                         );
                     let mut color = Color::Rgb(0xcc, 0x55, 0x00);
-                    if list.num == active_list {
+                    if list.id == active_list {
                         color = Color::Yellow;
                     }
                     let list_out = List::new(list.tasks)
@@ -216,9 +243,8 @@ fn create_list() -> Result<Vec<TaskList>, Error>{
     };
 
     let new_list = TaskList {
-        size: 2,
-        num: parsed.len() + 1,
-        name: format!("list {}", parsed.len() + 1),
+        id: parsed.len() + 1,
+        title: format!("list {}", parsed.len() + 1),
         tasks: vec![
             "task 1".to_string(),
             "task 2".to_string(),
