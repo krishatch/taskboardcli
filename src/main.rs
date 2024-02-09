@@ -11,7 +11,7 @@ use serde::{Deserialize, Serialize};
 use std::fs;
 use thiserror::Error;
 
-const DB_PATH: &str = "./data/lists.json";
+const DB_PATH: &str = "/Users/krishatch/Engineering/SWE/taskboardcli/data/lists.json";
 /*** Error handling for db reading ***/
 #[derive(Error, Debug)]
 pub enum Error {
@@ -216,7 +216,7 @@ fn read_db() -> Result<Vec<TaskList>, Error> {
 fn create_list(taskboard: &mut TaskBoard) {
     let new_list = TaskList {
         id:  taskboard.num_lists + 1,
-        title: "".to_string(),
+        title: String::from(""),
         tasks: vec![],
     };
 
@@ -239,9 +239,6 @@ fn delete_list(taskboard: &mut TaskBoard) {
         }
     }
 }
-
-// fn add_task(taskboard: &mut TaskBoard) {
-// }
 
 fn get_helpline() -> Line<'static>{
     Line::from(vec![
@@ -347,6 +344,9 @@ fn handle_events(active_menu_item: &mut MenuItem, taskboard: &mut TaskBoard) -> 
                     } else if key.code == KeyCode::Enter {
                         *active_menu_item = MenuItem::Home;
                         return Ok(false);
+                    } else if key.code == KeyCode::Backspace{
+                        let title = &mut taskboard.lists[taskboard.num_lists - 1].title;
+                        title.pop(); // Convert character to uppercase
                     }
                 }
                 /*** Home ***/
@@ -361,7 +361,7 @@ fn handle_events(active_menu_item: &mut MenuItem, taskboard: &mut TaskBoard) -> 
                             }
                             'a' => {
                                 if taskboard.num_lists > 0 {
-                                    taskboard.lists[taskboard.active_list - 1].tasks.push("".to_string());
+                                    taskboard.lists[taskboard.active_list - 1].tasks.push(String::from(""));
                                     *active_menu_item = MenuItem::AddingTask;
                                 }
                                 return Ok(false);
