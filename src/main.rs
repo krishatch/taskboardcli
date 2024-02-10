@@ -43,6 +43,7 @@ struct TaskList {
     id: usize,
     title: String,
     tasks: Vec<String>,
+    selected: usize,
 }
 
 #[derive(Serialize, Deserialize, Clone)]
@@ -87,7 +88,7 @@ fn main() -> io::Result<()> {
     
     /*** main loop ***/
     while !quit {
-        let _ = ui(&mut terminal, &mut taskboard);
+        let _ = ui(&mut terminal, &mut taskboard, &mut active_menu_item);
         quit = handle_events(&mut active_menu_item, &mut taskboard)?; }
 
     let _ = write_db(&mut taskboard);
@@ -96,7 +97,7 @@ fn main() -> io::Result<()> {
     Ok(())
 }
 
-fn ui(terminal: &mut Terminal<CrosstermBackend<Stdout>>, taskboard: &mut TaskBoard) -> Result<u32, Error> {
+fn ui(terminal: &mut Terminal<CrosstermBackend<Stdout>>, taskboard: &mut TaskBoard, active_menu_item: &mut MenuItem) -> Result<u32, Error> {
     /*** Set up default layout ***/
     terminal.draw(|frame| {
         let size = frame.size();
@@ -113,8 +114,7 @@ fn ui(terminal: &mut Terminal<CrosstermBackend<Stdout>>, taskboard: &mut TaskBoa
 
         /*** Help menu ***/
         let help_info = get_helpline();
-        let help = Paragraph::new(help_info.clone())
-            .style(Style::default().fg(Color::Gray))
+        let help = Paragraph::new(help_info.clone()) .style(Style::default().fg(Color::Gray))
             .alignment(Alignment::Center)
             .block(
                 Block::default()
@@ -127,7 +127,6 @@ fn ui(terminal: &mut Terminal<CrosstermBackend<Stdout>>, taskboard: &mut TaskBoa
 
         /*** Main Taskboard ***/
 
-        let mut task_list_state = ListState::default();
         match taskboard.num_lists{
             0 => {
                 let taskboard = Paragraph::new("No Lists")
@@ -152,6 +151,7 @@ fn ui(terminal: &mut Terminal<CrosstermBackend<Stdout>>, taskboard: &mut TaskBoa
                     .constraints(constraints)
                     .split(chunks[1]);
 
+                let mut task_list_state = ListState::default().with_selected(Some(taskboard.lists[taskboard.active_list - 1].selected));
                 for (i, list) in taskboard.lists.clone().into_iter().enumerate(){
                     let taskboard_list = Layout::default()
                         .direction(Direction::Vertical)
@@ -160,28 +160,50 @@ fn ui(terminal: &mut Terminal<CrosstermBackend<Stdout>>, taskboard: &mut TaskBoa
                             Constraint::Min(2),
                         ])
                         .split(home[i]);
+                    let color = match active_menu_item {
+                        MenuItem::AddingList => {
+                            if list.id == taskboard.active_list{
+                                Color::Yellow
+                            } else {
+                                Color::Rgb(0xcc, 0x55, 0x00)
+                            }
+                        }
+                        _ => Color::Rgb(0xcc, 0x55, 0x00),
+                    };
                     let title = Paragraph::new(list.title.clone())
                         .style(Style::default().fg(Color::Rgb(0xFF, 0xFF, 0xFF)))
                         .alignment(Alignment::Center)
                         .block(
                             Block::default()
                                 .borders(Borders::ALL)
-                                .style(Style::default().fg(Color::Rgb(0xcc, 0x55, 0x00)))
-                                .title("List ".to_owned() + &i.to_string())
+                                .style(Style::default().fg(color))
+                                .title("List ".to_owned() + &(i + 1).to_string())
                                 .border_type(BorderType::Plain),
                         );
-                    let mut color = Color::Rgb(0xcc, 0x55, 0x00);
-                    if list.id == taskboard.active_list{
-                        color = Color::Yellow;
-                    }
+
+                    let color = match active_menu_item {
+                        MenuItem::Home => {
+                            if list.id == taskboard.active_list {
+                                Color::Yellow
+                            } else {
+                                Color::Rgb(0xcc, 0x55, 0x00)
+                            }
+                        },
+                        MenuItem::AddingList => Color::Rgb(0xcc, 0x55, 0x00),
+                        MenuItem::AddingTask => Color::Yellow,
+                    };
+                    let empty = list.tasks.is_empty();
                     let list_out = List::new(list.tasks)
                             .block(Block::default().fg(color).title("List").borders(Borders::ALL))
                             .style(Style::default().fg(Color::Rgb(0xff, 0xff, 0xff)))
                             .highlight_style(Style::default().add_modifier(Modifier::ITALIC))
-                            .highlight_symbol(">>")
                             .repeat_highlight_symbol(true)
                             .direction(ListDirection::TopToBottom);
-                    frame.render_stateful_widget(list_out, taskboard_list[1], &mut task_list_state);
+                    if list.id == taskboard.active_list && !empty{
+                        frame.render_stateful_widget(list_out, taskboard_list[1], &mut task_list_state);
+                    } else {
+                        frame.render_widget(list_out, taskboard_list[1]);
+                    }
                     frame.render_widget(title, taskboard_list[0]);
                 }
             }
@@ -216,8 +238,9 @@ fn read_db() -> Result<Vec<TaskList>, Error> {
 fn create_list(taskboard: &mut TaskBoard) {
     let new_list = TaskList {
         id:  taskboard.num_lists + 1,
-        title: String::from(""),
+        title: String::from("|"),
         tasks: vec![],
+        selected: 0,
     };
 
     taskboard.lists.push(new_list);
@@ -234,7 +257,12 @@ fn delete_list(taskboard: &mut TaskBoard) {
     match taskboard.num_lists {
         0 => {},
         _ => {
-            taskboard.lists.pop();
+            taskboard.lists.remove(taskboard.active_list - 1);
+            // let new_active = match taskboard.active_list {
+            //     1 => 1,
+            //     _ => taskboard.active_list,
+            // };
+            // taskboard.active_list = new_active;
             taskboard.num_lists -= 1;
         }
     }
@@ -321,14 +349,33 @@ fn handle_events(active_menu_item: &mut MenuItem, taskboard: &mut TaskBoard) -> 
                     // make inputs change list name
                     if key.kind == event::KeyEventKind::Press && key.code == KeyCode::Enter {
                         *active_menu_item = MenuItem::Home;
-                        return Ok(false);
+                        let tasks = &mut taskboard.lists[taskboard.active_list - 1].tasks;
+                        let last_task_index = tasks.len() - 1;
+                        if let Some(last_task) = tasks.get_mut(last_task_index) {
+                            let mut new_task = last_task.clone();
+                            new_task.pop();
+                            *last_task = new_task;
+                            return Ok(false);
+                        }
                     }
                     if let KeyCode::Char(c) = key.code {
                         let tasks = &mut taskboard.lists[taskboard.active_list - 1].tasks;
                         let last_task_index = tasks.len() - 1;
                         if let Some(last_task) = tasks.get_mut(last_task_index) {
                             let mut new_task = last_task.clone();
-                            new_task.push(c);
+                            new_task.insert(new_task.len() - 1 ,c);
+                            *last_task = new_task;
+                            return Ok(false);
+                        }
+                    }
+                    if key.code == KeyCode::Backspace{
+                        let tasks = &mut taskboard.lists[taskboard.active_list - 1].tasks;
+                        let last_task_index = tasks.len() - 1;
+                        if let Some(last_task) = tasks.get_mut(last_task_index) {
+                            let mut new_task = last_task.clone();
+                            if new_task.len() != 1{
+                                new_task.remove(new_task.len() - 2);
+                            }
                             *last_task = new_task;
                             return Ok(false);
                         }
@@ -339,14 +386,18 @@ fn handle_events(active_menu_item: &mut MenuItem, taskboard: &mut TaskBoard) -> 
                 MenuItem::AddingList => {
                     if let KeyCode::Char(c) = key.code {
                         let title = &mut taskboard.lists[taskboard.num_lists - 1].title;
-                        title.push(c); // Convert character to uppercase
+                        title.insert(title.len() - 1, c); 
                         return Ok(false);
                     } else if key.code == KeyCode::Enter {
+                        let title = &mut taskboard.lists[taskboard.num_lists - 1].title;
+                        title.pop();
                         *active_menu_item = MenuItem::Home;
                         return Ok(false);
                     } else if key.code == KeyCode::Backspace{
                         let title = &mut taskboard.lists[taskboard.num_lists - 1].title;
-                        title.pop(); // Convert character to uppercase
+                        if title.len() != 1{
+                            title.remove(title.len() - 2);
+                        }
                     }
                 }
                 /*** Home ***/
@@ -356,24 +407,55 @@ fn handle_events(active_menu_item: &mut MenuItem, taskboard: &mut TaskBoard) -> 
                             'q' => return Ok(true),
                             'n' => {
                                 create_list(taskboard);
+                                taskboard.active_list = taskboard.lists.len();
                                 *active_menu_item = MenuItem::AddingList;
                                 return Ok(false);
                             }
                             'a' => {
                                 if taskboard.num_lists > 0 {
-                                    taskboard.lists[taskboard.active_list - 1].tasks.push(String::from(""));
+                                    taskboard.lists[taskboard.active_list - 1].tasks.push(String::from("|"));
+                                    taskboard.lists[taskboard.active_list - 1].selected = taskboard.lists[taskboard.active_list - 1].tasks.len() - 1;
                                     *active_menu_item = MenuItem::AddingTask;
                                 }
                                 return Ok(false);
                             }
                             'c' => {
-                                taskboard.lists[taskboard.active_list - 1].tasks.pop();
+                                let active_list_index = taskboard.active_list - 1;
+                                let active_list = &mut taskboard.lists[active_list_index];
+                                if active_list.tasks.is_empty(){
+                                    return Ok(false);
+                                }
+                                let selected_task_index = active_list.selected;
+
+                                active_list.tasks.remove(selected_task_index);
+
+                                let new_selected = match selected_task_index {
+                                    0 => 0,
+                                    len if len == active_list.tasks.len() => len - 1,
+                                    other => other,
+                                };
+
+                                active_list.selected = new_selected;
                                 return Ok(false);
                             }
                             'd' => {
                                 delete_list(taskboard);
                                 taskboard.num_lists = taskboard.lists.len();
+                                let new_active_list = match taskboard.active_list {
+                                    1 => 1,
+                                    _=> taskboard.active_list - 1,
+                                };
+                                for (i, list) in taskboard.lists.iter_mut().enumerate() {
+                                    list.id = i + 1;
+                                }
+                                taskboard.active_list = new_active_list;
                                 return Ok(false);
+                            }
+                            'j' => if taskboard.lists[taskboard.active_list - 1].selected + 1< taskboard.lists[taskboard.active_list - 1].tasks.len(){
+                                taskboard.lists[taskboard.active_list - 1].selected += 1;
+                            }
+                            'k' => if taskboard.lists[taskboard.active_list - 1].selected > 0{
+                                taskboard.lists[taskboard.active_list - 1].selected -= 1;
                             }
                             'h' | 'l' | '0'..='9' => {
                                 let new_active_list = match c {
@@ -383,6 +465,7 @@ fn handle_events(active_menu_item: &mut MenuItem, taskboard: &mut TaskBoard) -> 
                                     _ => taskboard.active_list,
                                 };
                                 taskboard.active_list = new_active_list;
+                                taskboard.lists[taskboard.active_list - 1].selected = 0;
                                 return Ok(false);
                             }
                             _ => {}
