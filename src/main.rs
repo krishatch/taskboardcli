@@ -12,6 +12,10 @@ use std::fs;
 use thiserror::Error;
 
 const DB_PATH: &str = "/Users/krishatch/Engineering/SWE/taskboardcli/data/lists.json";
+const COLOR1: Color = Color::LightCyan;
+// const COLOR2: Color = Color::Rgb(0xff, 0xff, 0xff);
+const COLOR2: Color = Color::Cyan;
+const COLOR3: Color = Color::Magenta;
 /*** Error handling for db reading ***/
 #[derive(Error, Debug)]
 pub enum Error {
@@ -119,7 +123,7 @@ fn ui(terminal: &mut Terminal<CrosstermBackend<Stdout>>, taskboard: &mut TaskBoa
             .block(
                 Block::default()
                     .borders(Borders::ALL)
-                    .style(Style::default().fg(Color::Rgb(0xcc, 0x55, 0x00)))
+                    .style(Style::default().fg(COLOR1))
                     .title("Commands")
                     .border_type(BorderType::Plain),
                 );
@@ -130,12 +134,12 @@ fn ui(terminal: &mut Terminal<CrosstermBackend<Stdout>>, taskboard: &mut TaskBoa
         match taskboard.num_lists{
             0 => {
                 let taskboard = Paragraph::new("No Lists")
-                    .style(Style::default().fg(Color::Rgb(0xFF, 0xFF, 0xFF)))
+                    .style(Style::default().fg(COLOR2))
                     .alignment(Alignment::Center)
                     .block(
                         Block::default()
                             .borders(Borders::ALL)
-                            .style(Style::default().fg(Color::Rgb(0xcc, 0x55, 0x00)))
+                            .style(Style::default().fg(COLOR1))
                             .title("Taskboard")
                             .border_type(BorderType::Plain),
                     );
@@ -163,15 +167,15 @@ fn ui(terminal: &mut Terminal<CrosstermBackend<Stdout>>, taskboard: &mut TaskBoa
                     let color = match active_menu_item {
                         MenuItem::AddingList => {
                             if list.id == taskboard.active_list{
-                                Color::Yellow
+                                COLOR3
                             } else {
-                                Color::Rgb(0xcc, 0x55, 0x00)
+                                COLOR1
                             }
                         }
-                        _ => Color::Rgb(0xcc, 0x55, 0x00),
+                        _ => COLOR1,
                     };
                     let title = Paragraph::new(list.title.clone())
-                        .style(Style::default().fg(Color::Rgb(0xFF, 0xFF, 0xFF)))
+                        .style(Style::default().fg(COLOR2))
                         .alignment(Alignment::Center)
                         .block(
                             Block::default()
@@ -184,19 +188,25 @@ fn ui(terminal: &mut Terminal<CrosstermBackend<Stdout>>, taskboard: &mut TaskBoa
                     let color = match active_menu_item {
                         MenuItem::Home => {
                             if list.id == taskboard.active_list {
-                                Color::Yellow
+                                COLOR3
                             } else {
-                                Color::Rgb(0xcc, 0x55, 0x00)
+                                COLOR1
                             }
                         },
-                        MenuItem::AddingList => Color::Rgb(0xcc, 0x55, 0x00),
-                        MenuItem::AddingTask => Color::Yellow,
+                        MenuItem::AddingList => COLOR1,
+                        MenuItem::AddingTask => 
+                            if list.id == taskboard.active_list {
+                                COLOR3
+                            } else {
+                                COLOR1
+                            }
                     };
                     let empty = list.tasks.is_empty();
                     let list_out = List::new(list.tasks)
                             .block(Block::default().fg(color).title("List").borders(Borders::ALL))
-                            .style(Style::default().fg(Color::Rgb(0xff, 0xff, 0xff)))
+                            .style(Style::default().fg(COLOR2))
                             .highlight_style(Style::default().add_modifier(Modifier::ITALIC))
+                            .highlight_symbol(">>")
                             .repeat_highlight_symbol(true)
                             .direction(ListDirection::TopToBottom);
                     if list.id == taskboard.active_list && !empty{
@@ -210,12 +220,12 @@ fn ui(terminal: &mut Terminal<CrosstermBackend<Stdout>>, taskboard: &mut TaskBoa
         }
 
         let copyright = Paragraph::new("taskboardcli 2024 - all rights reserved")
-            .style(Style::default().fg(Color::Rgb(0xFF, 0xFF, 0xFF)))
+            .style(Style::default().fg(COLOR2))
             .alignment(Alignment::Center)
             .block(
                 Block::default()
                     .borders(Borders::ALL)
-                    .style(Style::default().fg(Color::Rgb(0xcc, 0x55, 0x00)))
+                    .style(Style::default().fg(COLOR1))
                     .title("Copyright")
                     .border_type(BorderType::Plain),
             );
@@ -273,68 +283,68 @@ fn get_helpline() -> Line<'static>{
         Span::styled(
             "<num>",
             Style::default()
-                .fg(Color::Rgb(0xcc, 0x55, 0x00))
+                .fg(COLOR1)
                 .add_modifier(Modifier::UNDERLINED),
         ),
         Span::styled(
             " Select List - ",
             Style::default()
-                .fg(Color::Rgb(0xff, 0xff, 0xff))
+                .fg(COLOR2)
         ),
         Span::styled(
             "N",
             Style::default()
-                .fg(Color::Rgb(0xcc, 0x55, 0x00))
+                .fg(COLOR1)
                 .add_modifier(Modifier::UNDERLINED),
         ),
         Span::styled(
             "ew List - ",
             Style::default()
-                .fg(Color::Rgb(0xff, 0xff, 0xff))
+                .fg(COLOR2)
         ),
         Span::styled(
             "D",
             Style::default()
-                .fg(Color::Rgb(0xcc, 0x55, 0x00))
+                .fg(COLOR1)
                 .add_modifier(Modifier::UNDERLINED),
         ),
         Span::styled(
             "elete List - ",
             Style::default()
-                .fg(Color::Rgb(0xff, 0xff, 0xff))
+                .fg(COLOR2)
         ),
         Span::styled(
             "A",
             Style::default()
-                .fg(Color::Rgb(0xcc, 0x55, 0x00))
+                .fg(COLOR1)
                 .add_modifier(Modifier::UNDERLINED),
         ),
         Span::styled(
             "dd item - ",
             Style::default()
-                .fg(Color::Rgb(0xff, 0xff, 0xff))
+                .fg(COLOR2)
         ),
         Span::styled(
             "C",
             Style::default()
-                .fg(Color::Rgb(0xcc, 0x55, 0x00))
+                .fg(COLOR1)
                 .add_modifier(Modifier::UNDERLINED),
         ),
         Span::styled(
             "ross item - ",
             Style::default()
-                .fg(Color::Rgb(0xff, 0xff, 0xff))
+                .fg(COLOR2)
         ),
         Span::styled(
             "Q",
             Style::default()
-                .fg(Color::Rgb(0xcc, 0x55, 0x00))
+                .fg(COLOR1)
                 .add_modifier(Modifier::UNDERLINED),
         ),
         Span::styled(
             "uit",
             Style::default()
-                .fg(Color::Rgb(0xff, 0xff, 0xff))
+                .fg(COLOR2)
         ),
         ]
     )
