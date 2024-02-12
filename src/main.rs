@@ -129,7 +129,6 @@ fn ui(terminal: &mut Terminal<CrosstermBackend<Stdout>>, taskboard: &mut TaskBoa
         frame.render_widget(help, chunks[0]);
 
         /*** Main Taskboard ***/
-
         match taskboard.num_lists{
             0 => {
                 let taskboard = Paragraph::new("No Lists")
@@ -354,6 +353,8 @@ fn handle_events(active_menu_item: &mut MenuItem, taskboard: &mut TaskBoard) -> 
     if event::poll(std::time::Duration::from_millis(50))? {
         if let Event::Key(key) = event::read()? {
             match active_menu_item {
+
+                /*** Adding Task ***/
                 MenuItem::AddingTask => {
                     // make inputs change list name
                     if key.kind == event::KeyEventKind::Press && key.code == KeyCode::Enter {
@@ -389,6 +390,15 @@ fn handle_events(active_menu_item: &mut MenuItem, taskboard: &mut TaskBoard) -> 
                             return Ok(false);
                         }
                     }
+                    if key.code == KeyCode::Esc{
+                        taskboard.lists[taskboard.active_list - 1].tasks.pop();
+                        taskboard.lists[taskboard.active_list - 1].selected = match taskboard.lists[taskboard.active_list - 1].tasks.len(){
+                            0 => 0,
+                            _=> taskboard.lists[taskboard.active_list - 1].tasks.len() - 1,
+                        };
+                        *active_menu_item = MenuItem::Home;
+
+                    }
                 }
 
                 /*** Adding List ***/
@@ -415,6 +425,7 @@ fn handle_events(active_menu_item: &mut MenuItem, taskboard: &mut TaskBoard) -> 
                         return Ok(false);
                     }
                 }
+
                 /*** Home ***/
                 MenuItem::Home => {
                     if let KeyCode::Char(c) = key.code {
@@ -441,15 +452,12 @@ fn handle_events(active_menu_item: &mut MenuItem, taskboard: &mut TaskBoard) -> 
                                     return Ok(false);
                                 }
                                 let selected_task_index = active_list.selected;
-
                                 active_list.tasks.remove(selected_task_index);
-
                                 let new_selected = match selected_task_index {
                                     0 => 0,
                                     len if len == active_list.tasks.len() => len - 1,
                                     other => other,
                                 };
-
                                 active_list.selected = new_selected;
                                 return Ok(false);
                             }
