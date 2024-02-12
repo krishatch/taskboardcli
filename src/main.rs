@@ -12,10 +12,9 @@ use std::fs;
 use thiserror::Error;
 
 const DB_PATH: &str = "/Users/krishatch/Engineering/SWE/taskboardcli/data/lists.json";
-const COLOR1: Color = Color::LightCyan;
-// const COLOR2: Color = Color::Rgb(0xff, 0xff, 0xff);
-const COLOR2: Color = Color::Cyan;
-const COLOR3: Color = Color::Magenta;
+const COLOR1: Color = Color::White;
+const COLOR2: Color = Color::Rgb(0xff, 0xff, 0xff);
+const COLOR3: Color = Color::Yellow;
 /*** Error handling for db reading ***/
 #[derive(Error, Debug)]
 pub enum Error {
@@ -408,6 +407,12 @@ fn handle_events(active_menu_item: &mut MenuItem, taskboard: &mut TaskBoard) -> 
                         if title.len() != 1{
                             title.remove(title.len() - 2);
                         }
+                    }else if key.code == KeyCode::Esc {
+                        taskboard.lists.pop();
+                        taskboard.num_lists -= 1;
+                        taskboard.active_list -= 1;
+                        *active_menu_item = MenuItem::Home;
+                        return Ok(false);
                     }
                 }
                 /*** Home ***/
