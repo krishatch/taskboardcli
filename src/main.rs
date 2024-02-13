@@ -6,7 +6,6 @@ use crossterm::{ event::{self, Event, KeyCode},
 use ratatui::{prelude::*, widgets::*};
 
 /*** Taskboard specific includes ***/
-// use chrono::prelude::*;
 use serde::{Deserialize, Serialize};
 use std::fs;
 use thiserror::Error;
@@ -15,6 +14,7 @@ const DB_PATH: &str = "/Users/krishatch/Engineering/SWE/taskboardcli/data/lists.
 const COLOR1: Color = Color::White;
 const COLOR2: Color = Color::Rgb(0xff, 0xff, 0xff);
 const COLOR3: Color = Color::Yellow;
+
 /*** Error handling for db reading ***/
 #[derive(Error, Debug)]
 pub enum Error {
@@ -266,11 +266,6 @@ fn delete_list(taskboard: &mut TaskBoard) {
         0 => {},
         _ => {
             taskboard.lists.remove(taskboard.active_list - 1);
-            // let new_active = match taskboard.active_list {
-            //     1 => 1,
-            //     _ => taskboard.active_list,
-            // };
-            // taskboard.active_list = new_active;
             taskboard.num_lists -= 1;
         }
     }
@@ -397,7 +392,6 @@ fn handle_events(active_menu_item: &mut MenuItem, taskboard: &mut TaskBoard) -> 
                             _=> taskboard.lists[taskboard.active_list - 1].tasks.len() - 1,
                         };
                         *active_menu_item = MenuItem::Home;
-
                     }
                 }
 
