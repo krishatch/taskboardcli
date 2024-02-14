@@ -297,7 +297,8 @@ fn update_dates(taskboard: &mut TaskBoard){
             match due_diff.num_days() {
                 0 => task.date_string = "Today".to_string(),
                 1 => task.date_string= "Tomorrow".to_string(),
-                _ => {},
+                2.. => {},
+                _ => task.date_string = "Overdue".to_string(),
             }
             
         }
@@ -361,7 +362,7 @@ fn get_helpline() -> Line<'static>{
                 .add_modifier(Modifier::UNDERLINED),
         ),
         Span::styled(
-            "ross item - ",
+            "elete item - ",
             Style::default()
                 .fg(COLOR2)
         ),
@@ -543,7 +544,7 @@ fn handle_events(active_menu_item: &mut MenuItem, taskboard: &mut TaskBoard) -> 
                                 active_list.selected = new_selected;
                                 return Ok(false);
                             }
-                            'd' => {
+                            'D' => {
                                 delete_list(taskboard);
                                 taskboard.num_lists = taskboard.lists.len();
                                 let new_active_list = match taskboard.active_list {
