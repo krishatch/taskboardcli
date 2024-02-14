@@ -1,4 +1,4 @@
-use std::{fmt::format, io::{self, stdout, Stdout}};
+use std::io::{self, stdout, Stdout};
 use crossterm::{ event::{self, Event, KeyCode},
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
     ExecutableCommand,
@@ -6,7 +6,6 @@ use crossterm::{ event::{self, Event, KeyCode},
 use ratatui::{prelude::*, widgets::*};
 
 /*** Taskboard specific includes ***/
-use std::fmt;
 use chrono::prelude::*;
 use serde::{Deserialize, Serialize};
 use std::fs;
