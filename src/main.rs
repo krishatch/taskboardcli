@@ -1,4 +1,4 @@
-use std::io::{self, stdout, Stdout};
+use std::{fmt::format, io::{self, stdout, Stdout}};
 use crossterm::{ event::{self, Event, KeyCode},
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
     ExecutableCommand,
@@ -6,15 +6,17 @@ use crossterm::{ event::{self, Event, KeyCode},
 use ratatui::{prelude::*, widgets::*};
 
 /*** Taskboard specific includes ***/
+use std::fmt;
+use chrono::prelude::*;
 use serde::{Deserialize, Serialize};
 use std::fs;
 use thiserror::Error;
 
+const DEBUG: bool = true;
 const DB_PATH: &str = "/Users/krishatch/Engineering/SWE/taskboardcli/data/lists.json";
 const COLOR1: Color = Color::White;
 const COLOR2: Color = Color::Rgb(0xff, 0xff, 0xff);
 const COLOR3: Color = Color::Yellow;
-
 /*** Error handling for db reading ***/
 #[derive(Error, Debug)]
 pub enum Error {
@@ -33,6 +35,7 @@ struct TaskBoard {
     num_lists: usize,
     lists: Vec<TaskList>,
     active_list: usize,
+    debug_str: String,
 }
 
 /*
@@ -45,21 +48,29 @@ struct TaskBoard {
 struct TaskList {
     id: usize,
     title: String,
-    tasks: Vec<String>,
+    tasks: Vec<Task>,
     selected: usize,
 }
 
 #[derive(Serialize, Deserialize, Clone)]
 struct Task {
     title: String,
-    due: String,
+    date_string: String,
+    due: NaiveDate,
+}
+
+impl From<Task> for Text<'static> {
+    fn from(task: Task) -> Self {
+        Text::raw(format!("{} - {}", task.title, task.date_string))
+    }
 }
 
 #[derive(Copy, Clone, Debug)]
 enum MenuItem {
     Home,
     AddingList,
-    AddingTask,
+    AddingTaskTitle,
+    AddingTaskDate,
 }
 
 impl From<MenuItem> for usize {
@@ -67,7 +78,8 @@ impl From<MenuItem> for usize {
         match input {
             MenuItem::Home => 0,
             MenuItem::AddingList => 1,
-            MenuItem::AddingTask => 2,
+            MenuItem::AddingTaskTitle => 2,
+            MenuItem::AddingTaskDate => 3,
         }
     }
 }
@@ -87,12 +99,15 @@ fn main() -> io::Result<()> {
         num_lists: read_db().expect("valid read").len(), 
         lists:read_db().expect("valid read"),
         active_list: 1,
+        debug_str: String::from(""),
     }; // Make a function that initialized the creation of the taskboard
     
     /*** main loop ***/
     while !quit {
         let _ = ui(&mut terminal, &mut taskboard, &mut active_menu_item);
-        quit = handle_events(&mut active_menu_item, &mut taskboard)?; }
+        quit = handle_events(&mut active_menu_item, &mut taskboard)?; 
+        update_dates(&mut taskboard);
+    }
 
     let _ = write_db(&mut taskboard);
     disable_raw_mode()?;
@@ -104,15 +119,17 @@ fn ui(terminal: &mut Terminal<CrosstermBackend<Stdout>>, taskboard: &mut TaskBoa
     /*** Set up default layout ***/
     terminal.draw(|frame| {
         let size = frame.size();
+        let mut constraints = vec![
+                Constraint::Length(3),
+                Constraint::Min(2),
+        ];
+        if DEBUG {
+            constraints.push(Constraint::Length(3));
+        }
         let chunks = Layout::default()
             .direction(Direction::Vertical)
             .margin(2)
-            .constraints([
-                Constraint::Length(3),
-                Constraint::Min(2),
-                Constraint::Length(3),
-            ].as_ref(),
-            )
+            .constraints(&constraints[..])
             .split(size);
 
         /*** Help menu ***/
@@ -192,7 +209,7 @@ fn ui(terminal: &mut Terminal<CrosstermBackend<Stdout>>, taskboard: &mut TaskBoa
                             }
                         },
                         MenuItem::AddingList => COLOR1,
-                        MenuItem::AddingTask => 
+                        _ => 
                             if list.id == taskboard.active_list {
                                 COLOR3
                             } else {
@@ -217,14 +234,15 @@ fn ui(terminal: &mut Terminal<CrosstermBackend<Stdout>>, taskboard: &mut TaskBoa
             }
         }
 
-        let copyright = Paragraph::new("taskboardcli 2024 - all rights reserved")
+        /*** Debug ***/
+        let copyright = Paragraph::new(taskboard.debug_str.clone())
             .style(Style::default().fg(COLOR2))
             .alignment(Alignment::Center)
             .block(
                 Block::default()
                     .borders(Borders::ALL)
                     .style(Style::default().fg(COLOR1))
-                    .title("Copyright")
+                    .title("DEBUG")
                     .border_type(BorderType::Plain),
             );
 
@@ -271,6 +289,25 @@ fn delete_list(taskboard: &mut TaskBoard) {
     }
 }
 
+fn update_dates(taskboard: &mut TaskBoard){
+    // Update strings 
+    for list in taskboard.lists.iter_mut(){
+        for task in list.tasks.iter_mut() {
+            let due_diff = NaiveDateTime::new(task.due, NaiveTime::from_hms_opt(0, 0, 0).unwrap()) - NaiveDateTime::new(Local::now().naive_local().date(), NaiveTime::from_hms_opt(0, 0, 0).unwrap());
+            match due_diff.num_days() {
+                0 => task.date_string = "Today".to_string(),
+                1 => task.date_string= "Tomorrow".to_string(),
+                _ => {},
+            }
+            
+        }
+    }
+
+    // Sort tasks by due date
+    for list in taskboard.lists.iter_mut() {
+        list.tasks.sort_by(|a, b| a.due.cmp(&b.due));
+    }
+}
 fn get_helpline() -> Line<'static>{
     Line::from(vec![
         Span::styled(
@@ -318,7 +355,7 @@ fn get_helpline() -> Line<'static>{
                 .fg(COLOR2)
         ),
         Span::styled(
-            "C",
+            "d",
             Style::default()
                 .fg(COLOR1)
                 .add_modifier(Modifier::UNDERLINED),
@@ -349,8 +386,8 @@ fn handle_events(active_menu_item: &mut MenuItem, taskboard: &mut TaskBoard) -> 
         if let Event::Key(key) = event::read()? {
             match active_menu_item {
 
-                /*** Adding Task ***/
-                MenuItem::AddingTask => {
+                /*** Adding task date ***/
+                MenuItem::AddingTaskDate => {
                     // make inputs change list name
                     if key.kind == event::KeyEventKind::Press && key.code == KeyCode::Enter {
                         *active_menu_item = MenuItem::Home;
@@ -358,7 +395,12 @@ fn handle_events(active_menu_item: &mut MenuItem, taskboard: &mut TaskBoard) -> 
                         let last_task_index = tasks.len() - 1;
                         if let Some(last_task) = tasks.get_mut(last_task_index) {
                             let mut new_task = last_task.clone();
-                            new_task.pop();
+                            new_task.date_string.pop();
+                            if let Ok(due_date) = NaiveDate::parse_from_str(&new_task.date_string, "%Y/%m/%d") {
+                                new_task.due = due_date;
+                            } else {
+                                taskboard.debug_str = format!("Failed to parse date: {}", new_task.date_string);
+                            }
                             *last_task = new_task;
                             return Ok(false);
                         }
@@ -368,7 +410,7 @@ fn handle_events(active_menu_item: &mut MenuItem, taskboard: &mut TaskBoard) -> 
                         let last_task_index = tasks.len() - 1;
                         if let Some(last_task) = tasks.get_mut(last_task_index) {
                             let mut new_task = last_task.clone();
-                            new_task.insert(new_task.len() - 1 ,c);
+                            new_task.date_string.insert(new_task.date_string.len() - 1 ,c);
                             *last_task = new_task;
                             return Ok(false);
                         }
@@ -378,8 +420,54 @@ fn handle_events(active_menu_item: &mut MenuItem, taskboard: &mut TaskBoard) -> 
                         let last_task_index = tasks.len() - 1;
                         if let Some(last_task) = tasks.get_mut(last_task_index) {
                             let mut new_task = last_task.clone();
-                            if new_task.len() != 1{
-                                new_task.remove(new_task.len() - 2);
+                            if new_task.date_string.len() != 1{
+                                new_task.date_string.remove(new_task.date_string.len() - 2);
+                            }
+                            *last_task = new_task;
+                            return Ok(false);
+                        }
+                    }
+                    if key.code == KeyCode::Esc{
+                        taskboard.lists[taskboard.active_list - 1].tasks.pop();
+                        taskboard.lists[taskboard.active_list - 1].selected = match taskboard.lists[taskboard.active_list - 1].tasks.len(){
+                            0 => 0,
+                            _=> taskboard.lists[taskboard.active_list - 1].tasks.len() - 1,
+                        };
+                        *active_menu_item = MenuItem::Home;
+                    }
+                }
+
+                /*** Adding Task ***/
+                MenuItem::AddingTaskTitle => {
+                    // make inputs change list name
+                    if key.kind == event::KeyEventKind::Press && key.code == KeyCode::Enter {
+                        *active_menu_item = MenuItem::AddingTaskDate;
+                        let tasks = &mut taskboard.lists[taskboard.active_list - 1].tasks;
+                        let last_task_index = tasks.len() - 1;
+                        if let Some(last_task) = tasks.get_mut(last_task_index) {
+                            let mut new_task = last_task.clone();
+                            new_task.title.pop();
+                            *last_task = new_task;
+                            return Ok(false);
+                        }
+                    }
+                    if let KeyCode::Char(c) = key.code {
+                        let tasks = &mut taskboard.lists[taskboard.active_list - 1].tasks;
+                        let last_task_index = tasks.len() - 1;
+                        if let Some(last_task) = tasks.get_mut(last_task_index) {
+                            let mut new_task = last_task.clone();
+                            new_task.title.insert(new_task.title.len() - 1 ,c);
+                            *last_task = new_task;
+                            return Ok(false);
+                        }
+                    }
+                    if key.code == KeyCode::Backspace{
+                        let tasks = &mut taskboard.lists[taskboard.active_list - 1].tasks;
+                        let last_task_index = tasks.len() - 1;
+                        if let Some(last_task) = tasks.get_mut(last_task_index) {
+                            let mut new_task = last_task.clone();
+                            if new_task.title.len() != 1{
+                                new_task.title.remove(new_task.title.len() - 2);
                             }
                             *last_task = new_task;
                             return Ok(false);
@@ -433,13 +521,13 @@ fn handle_events(active_menu_item: &mut MenuItem, taskboard: &mut TaskBoard) -> 
                             }
                             'a' => {
                                 if taskboard.num_lists > 0 {
-                                    taskboard.lists[taskboard.active_list - 1].tasks.push(String::from("|"));
+                                    taskboard.lists[taskboard.active_list - 1].tasks.push(Task{title: String::from("|"), due: NaiveDate::from_ymd_opt(2102, 12, 1).unwrap(), date_string: String::from("|")});
                                     taskboard.lists[taskboard.active_list - 1].selected = taskboard.lists[taskboard.active_list - 1].tasks.len() - 1;
-                                    *active_menu_item = MenuItem::AddingTask;
+                                    *active_menu_item = MenuItem::AddingTaskTitle;
                                 }
                                 return Ok(false);
                             }
-                            'c' => {
+                            'd' => {
                                 let active_list_index = taskboard.active_list - 1;
                                 let active_list = &mut taskboard.lists[active_list_index];
                                 if active_list.tasks.is_empty(){
