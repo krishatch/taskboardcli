@@ -10,7 +10,7 @@ use ratatui::{prelude::*, widgets::*};
 /*** Taskboard specific includes ***/
 use chrono::prelude::*;
 use serde::{Deserialize, Serialize};
-use std::fs::{self, File, OpenOptions};
+use std::fs::{self, OpenOptions};
 use thiserror::Error;
 
 const DEBUG: bool = true;
