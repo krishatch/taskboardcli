@@ -1,4 +1,6 @@
 use std::io::{self, stdout, Stdout};
+use std::env;
+use std::path::PathBuf;
 use crossterm::{ event::{self, Event, KeyCode},
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
     ExecutableCommand,
@@ -8,11 +10,10 @@ use ratatui::{prelude::*, widgets::*};
 /*** Taskboard specific includes ***/
 use chrono::prelude::*;
 use serde::{Deserialize, Serialize};
-use std::fs;
+use std::fs::{self, File, OpenOptions};
 use thiserror::Error;
 
 const DEBUG: bool = true;
-const DB_PATH: &str = "/Users/krishatch/Engineering/SWE/taskboardcli/data/lists.json";
 const COLOR1: Color = Color::White;
 const COLOR2: Color = Color::Rgb(0xff, 0xff, 0xff);
 const COLOR3: Color = Color::Yellow;
@@ -251,8 +252,28 @@ fn ui(terminal: &mut Terminal<CrosstermBackend<Stdout>>, taskboard: &mut TaskBoa
     Ok(0)
 }
 
+fn get_db_path() -> Result<PathBuf, Error> {
+    let bin_path = env::current_exe().unwrap();
+    let mut db_path = bin_path.clone();
+    db_path.pop();
+    db_path.pop();
+    db_path.pop();
+    db_path.push("data/");
+    if !db_path.exists(){
+        let _ = fs::create_dir(db_path.clone());
+        db_path.push("lists.json");
+        // let file = File::create(db_path.clone()).unwrap();
+        let _ = OpenOptions::new().truncate(true).create(true).write(true).open(db_path.clone());
+    } else {
+        db_path.push("lists.json");
+    }
+    Ok(db_path)
+}
+
 fn read_db() -> Result<Vec<TaskList>, Error> {
-    let db_content = fs::read_to_string(DB_PATH)?;
+    let db_path = get_db_path()?;
+    print!("{}", db_path.display());
+    let db_content = fs::read_to_string(db_path)?;
     let parsed: Vec<TaskList> = match serde_json::from_str(&db_content){
         Ok(parsed) => parsed,
         Err(_err) => vec![],
@@ -274,7 +295,8 @@ fn create_list(taskboard: &mut TaskBoard) {
 
 fn write_db(taskboard: &mut TaskBoard) -> Result<Vec<TaskList>, Error>{
     let tasklists = taskboard.lists.clone();
-    fs::write(DB_PATH, serde_json::to_vec(&tasklists)?)?;
+    let db_path = get_db_path()?;
+    fs::write(db_path, serde_json::to_vec(&tasklists)?)?;
     Ok(tasklists)
 }
 
