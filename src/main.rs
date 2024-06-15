@@ -271,7 +271,6 @@ fn get_db_path() -> Result<PathBuf, Error> {
 
 fn read_db() -> Result<Vec<TaskList>, Error> {
     let db_path = get_db_path()?;
-    print!("{}", db_path.display());
     let db_content = fs::read_to_string(db_path)?;
     let parsed: Vec<TaskList> = match serde_json::from_str(&db_content){
         Ok(parsed) => parsed,
