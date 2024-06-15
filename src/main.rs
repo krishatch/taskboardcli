@@ -262,7 +262,6 @@ fn get_db_path() -> Result<PathBuf, Error> {
     if !db_path.exists(){
         let _ = fs::create_dir(db_path.clone());
         db_path.push("lists.json");
-        // let file = File::create(db_path.clone()).unwrap();
         let _ = OpenOptions::new().truncate(true).create(true).write(true).open(db_path.clone());
     } else {
         db_path.push("lists.json");
