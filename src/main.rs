@@ -1,6 +1,5 @@
 use std::io::{self, stdout, Stdout};
-use std::env;
-use std::path::PathBuf;
+use std::path::Path;
 use crossterm::{ event::{self, Event, KeyCode},
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
     ExecutableCommand,
@@ -10,7 +9,7 @@ use ratatui::{prelude::*, widgets::*};
 /*** Taskboard specific includes ***/
 use chrono::prelude::*;
 use serde::{Deserialize, Serialize};
-use std::fs::{self, OpenOptions};
+use std::fs;
 use thiserror::Error;
 
 const DEBUG: bool = true;
@@ -252,26 +251,25 @@ fn ui(terminal: &mut Terminal<CrosstermBackend<Stdout>>, taskboard: &mut TaskBoa
     Ok(0)
 }
 
-fn get_db_path() -> Result<PathBuf, Error> {
-    let bin_path = env::current_exe().unwrap();
-    let mut db_path = bin_path.clone();
-    db_path.pop();
-    db_path.pop();
-    db_path.pop();
-    db_path.push("data/");
-    if !db_path.exists(){
-        let _ = fs::create_dir(db_path.clone());
-        db_path.push("lists.json");
-        let _ = OpenOptions::new().truncate(true).create(true).write(true).open(db_path.clone());
-    } else {
-        db_path.push("lists.json");
-    }
-    Ok(db_path)
-}
-
 fn read_db() -> Result<Vec<TaskList>, Error> {
-    let db_path = get_db_path()?;
-    let db_content = fs::read_to_string(db_path)?;
+    let db_path = Path::new("/usr/local/share/taskboardcli/data.json");
+    // let db_content = fs::read_to_string(db_path).expect("Failed to read JSON");
+    let db_content = match fs::read_to_string(db_path) {
+        Ok(db_content) =>{db_content}
+        Err(error) if error.kind() == io::ErrorKind::NotFound => {
+            if let Err(e) = fs::create_dir_all(db_path.parent().unwrap()) {
+                eprintln!("Failed to create directories: {}", e);
+                std::process::exit(1);
+            }
+            fs::File::create(db_path).expect("Failed to create JSON file");
+            "".to_string()
+        }
+        Err(error) => {
+            // Some other error occurred
+            eprintln!("Failed to read JSON file: {}", error);
+            std::process::exit(1);
+        }
+    };
     let parsed: Vec<TaskList> = match serde_json::from_str(&db_content){
         Ok(parsed) => parsed,
         Err(_err) => vec![],
@@ -293,7 +291,7 @@ fn create_list(taskboard: &mut TaskBoard) {
 
 fn write_db(taskboard: &mut TaskBoard) -> Result<Vec<TaskList>, Error>{
     let tasklists = taskboard.lists.clone();
-    let db_path = get_db_path()?;
+    let db_path = Path::new("/usr/local/share/taskboardcli/data.json");
     fs::write(db_path, serde_json::to_vec(&tasklists)?)?;
     Ok(tasklists)
 }
