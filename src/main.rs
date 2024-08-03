@@ -5,6 +5,7 @@ use crossterm::{ event::{self, Event, KeyCode},
     ExecutableCommand,
 };
 use ratatui::{prelude::*, widgets::*};
+use home::*;
 
 /*** Taskboard specific includes ***/
 use chrono::prelude::*;
@@ -252,7 +253,8 @@ fn ui(terminal: &mut Terminal<CrosstermBackend<Stdout>>, taskboard: &mut TaskBoa
 }
 
 fn read_db() -> Result<Vec<TaskList>, Error> {
-    let db_path = Path::new("/usr/local/share/taskboardcli/data.json");
+    let db_path = home_dir().expect("NO PATH").push(".data.json");
+        
     // let db_content = fs::read_to_string(db_path).expect("Failed to read JSON");
     let db_content = match fs::read_to_string(db_path) {
         Ok(db_content) =>{db_content}
@@ -291,7 +293,7 @@ fn create_list(taskboard: &mut TaskBoard) {
 
 fn write_db(taskboard: &mut TaskBoard) -> Result<Vec<TaskList>, Error>{
     let tasklists = taskboard.lists.clone();
-    let db_path = Path::new("/usr/local/share/taskboardcli/data.json");
+    let db_path = Path::new("~/.data.json");
     fs::write(db_path, serde_json::to_vec(&tasklists)?)?;
     Ok(tasklists)
 }
