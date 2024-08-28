@@ -60,7 +60,11 @@ struct Task {
 
 impl From<Task> for Text<'static> {
     fn from(task: Task) -> Self {
-        Text::raw(format!("{} - {}", task.title, task.date_string))
+        if task.date_string != String::new(){
+            Text::raw(format!("{} - {}", task.title, task.date_string))
+        } else {
+            Text::raw(format!("{}", task.title))
+        }
     }
 }
 
@@ -430,7 +434,11 @@ fn handle_events(active_menu_item: &mut MenuItem, taskboard: &mut TaskBoard) -> 
                             if let Ok(due_date) = NaiveDate::parse_from_str(&new_task.date_string, "%Y/%m/%d") {
                                 new_task.due = due_date;
                             } else {
-                                taskboard.debug_str = format!("Failed to parse date: {}", new_task.date_string);
+                                if new_task.date_string == String::new() {
+                                    taskboard.debug_str = "Empty Date".to_string();
+                                } else {
+                                    taskboard.debug_str = format!("Failed to parse date: {}", new_task.date_string);
+                                }
                             }
                             *last_task = new_task;
                             return Ok(false);
