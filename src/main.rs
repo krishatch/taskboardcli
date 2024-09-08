@@ -433,12 +433,10 @@ fn handle_events(active_menu_item: &mut MenuItem, taskboard: &mut TaskBoard) -> 
                             new_task.date_string.pop();
                             if let Ok(due_date) = NaiveDate::parse_from_str(&new_task.date_string, "%Y/%m/%d") {
                                 new_task.due = due_date;
+                            } else if new_task.date_string == String::new(){
+                                taskboard.debug_str = "Empty Date".to_string();
                             } else {
-                                if new_task.date_string == String::new() {
-                                    taskboard.debug_str = "Empty Date".to_string();
-                                } else {
-                                    taskboard.debug_str = format!("Failed to parse date: {}", new_task.date_string);
-                                }
+                                taskboard.debug_str = format!("Failed to parse date: {}", new_task.date_string);
                             }
                             *last_task = new_task;
                             return Ok(false);
