@@ -433,6 +433,7 @@ fn handle_events(active_menu_item: &mut MenuItem, taskboard: &mut TaskBoard) -> 
                             new_task.date_string.pop();
                             if let Ok(due_date) = NaiveDate::parse_from_str(&new_task.date_string, "%Y/%m/%d") {
                                 new_task.due = due_date;
+                                new_task.date_string = format!("{}/{}", due_date.month0() + 1, due_date.day0() + 1);
                             } else if new_task.date_string == String::new(){
                                 taskboard.debug_str = "Empty Date".to_string();
                             } else {
